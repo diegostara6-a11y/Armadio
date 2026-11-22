@@ -1,0 +1,372 @@
+@page "/"
+@page "/armadio"
+@implements IDisposable
+@inject IJSRuntime JS
+
+<PageTitle>Atelier — Il tuo armadio</PageTitle>
+
+<div class="app-shell">
+    <aside class="sidebar">
+        <a class="brand" href="/">
+            <span class="brand-mark">A.</span>
+            <span><strong>ATELIER</strong><small>THE DIGITAL WARDROBE</small></span>
+        </a>
+        <div class="side-label">IL TUO SPAZIO</div>
+        <button class="nav-link @(activeTab == "wardrobe" ? "active" : "")" @onclick='() => SetTab("wardrobe")'>
+            <span class="nav-icon">▦</span> Il mio armadio <span class="nav-count">@items.Count</span>
+        </button>
+        <button class="nav-link @(activeTab == "outfits" ? "active" : "")" @onclick='() => SetTab("outfits")'>
+            <span class="nav-icon">✳</span> Crea un outfit
+        </button>
+        <div class="sidebar-note">
+            <span class="note-star">✳</span>
+            <p>Lo stile è un modo per dire chi sei, senza dover parlare.</p>
+            <small>— RACHEL ZOE</small>
+        </div>
+        <div class="side-footer"><span class="status-dot"></span> IL TUO STILE, A PORTATA DI MANO</div>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div class="mobile-brand">ATELIER <span> A.</span></div>
+            <div class="breadcrumb">IL TUO SPAZIO <span>/</span> @(activeTab == "wardrobe" ? "ARMADIO" : "STYLING STUDIO")</div>
+            <div class="topbar-right"><span class="today">@DateTime.Now.ToString("dddd, dd MMMM", new System.Globalization.CultureInfo("it-IT"))</span><span class="avatar">A</span></div>
+        </header>
+
+        @if (!loaded)
+        {
+            <div class="loading-state"><div class="loader"></div><p>Prepariamo il tuo spazio...</p></div>
+        }
+        else if (activeTab == "wardrobe")
+        {
+            <section class="page-heading">
+                <div>
+                    <div class="eyebrow">BENVENUTO NEL TUO SPAZIO</div>
+                    <h1>Il tuo armadio,<br /><em>senza confini.</em></h1>
+                    <p class="intro">Ogni capo racconta qualcosa di te. Raccogli i tuoi preferiti e crea combinazioni tutte nuove.</p>
+                </div>
+                <button class="primary-btn" @onclick="OpenAdd"><span>＋</span> Aggiungi un capo</button>
+            </section>
+
+            <section class="stats-row">
+                <div class="stat-card"><span class="stat-label">CAPI NEL TUO ARMADIO</span><strong>@items.Count.ToString("00")</strong><small>pezzi selezionati</small></div>
+                <div class="stat-card"><span class="stat-label">CATEGORIE</span><strong>@items.Select(x => x.Category).Distinct().Count().ToString("00")</strong><small>tipologie diverse</small></div>
+                <div class="stat-card"><span class="stat-label">STAGIONI</span><strong>@items.SelectMany(x => x.Seasons).Distinct().Count().ToString("00")</strong><small>stagioni coperte</small></div>
+                <div class="stat-quote"><span>✳</span><p>“La moda passa.<br /><em>Lo stile resta.”</em></p></div>
+            </section>
+
+            <div class="section-toolbar">
+                <div><div class="eyebrow">LA TUA COLLEZIONE</div><h2>I tuoi capi <span class="muted-count">(@FilteredItems.Count)</span></h2></div>
+                <div class="toolbar-controls">
+                    <div class="search-box"><span>⌕</span><input placeholder="Cerca un capo..." @bind="searchText" @bind:event="oninput" /></div>
+                    <select class="filter-select" @bind="categoryFilter">
+                        <option value="">Tutte le categorie</option>
+                        @foreach (var c in Categories) { <option value="@c">@c</option> }
+                    </select>
+                </div>
+            </div>
+
+            @if (items.Count == 0)
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">♧</div><h3>Qui comincia il tuo stile.</h3>
+                    <p>Il tuo armadio è ancora vuoto. Aggiungi il primo capo per iniziare a creare outfit.</p>
+                    <button class="primary-btn" @onclick="OpenAdd">＋ Aggiungi il primo capo</button>
+                </div>
+            }
+            else if (FilteredItems.Count == 0)
+            {
+                <div class="empty-state compact"><h3>Nessun capo trovato</h3><p>Prova a modificare la ricerca o il filtro.</p><button class="text-btn" @onclick="ClearFilters">Azzera filtri</button></div>
+            }
+            else
+            {
+                <div class="wardrobe-grid">
+                    @foreach (var item in FilteredItems)
+                    {
+                        <article class="garment-card" @key="item.Id">
+                            <div class="garment-photo">
+                                @if (!string.IsNullOrWhiteSpace(item.Photo)) { <img src="@item.Photo" alt="@item.Name" /> }
+                                else { <div class="photo-placeholder"><span>♧</span><small>NESSUNA FOTO</small></div> }
+                                <span class="season-tag">@string.Join(" · ", item.Seasons)</span>
+                                <button class="delete-item" title="Elimina capo" @onclick="() => DeleteItem(item)">×</button>
+                            </div>
+                            <div class="garment-info">
+                                <div class="garment-category">@item.Category.ToUpperInvariant()</div>
+                                <h3>@item.Name</h3>
+                                <div class="garment-meta"><span>@item.Style</span><span>·</span><span>@item.Fit</span></div>
+                                <div class="swatches">
+                                    @foreach (var color in item.Colors.Take(5))
+                                    { <span class="swatch" title="@color" style="background:@ColorHex(color)"></span> }
+                                    @if (item.Colors.Count > 0) { <small>@string.Join(", ", item.Colors)</small> }
+                                </div>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <section class="page-heading outfit-heading">
+                <div><div class="eyebrow">STYLING STUDIO</div><h1>Oggi cosa <em>indossi?</em></h1><p class="intro">Lasciati ispirare. Combiniamo i capi del tuo armadio per trovare nuovi modi di esprimere il tuo stile.</p></div>
+            </section>
+            <section class="styling-panel">
+                <div class="styling-panel-head"><div><div class="eyebrow">IL TUO LOOK, SU MISURA</div><h2>Imposta le tue preferenze</h2></div><span class="sparkle">✳</span></div>
+                <div class="preference-grid">
+                    <label>STAGIONE<select @bind="outfitSeason"><option>Primavera</option><option>Estate</option><option>Autunno</option><option>Inverno</option><option>Tutte</option></select></label>
+                    <label>STILE<select @bind="outfitStyle"><option value="">Sorprendimi</option><option>Elegante</option><option>Casual</option><option>Streetwear</option><option>Baggy</option><option>Sportivo</option><option>Minimal</option><option>Vintage</option></select></label>
+                    <label>GENERE<select @bind="outfitGender"><option value="">Qualsiasi</option><option>Maschile</option><option>Femminile</option><option>Unisex</option></select></label>
+                </div>
+                <button class="primary-btn generate-btn" @onclick="GenerateOutfit" disabled="@(items.Count < 2)">✳ Genera il mio outfit</button>
+                @if (items.Count < 2) { <small class="hint">Aggiungi almeno due capi per iniziare a creare combinazioni.</small> }
+            </section>
+            @if (generatedOutfits.Count > 0)
+            {
+                <div class="results-heading"><div><div class="eyebrow">SELEZIONE ATELIER</div><h2>Le tue combinazioni</h2></div><button class="text-btn" @onclick="GenerateOutfit">↻ Altre idee</button></div>
+                @foreach (var outfit in generatedOutfits)
+                {
+                    <article class="outfit-card">
+                        <div class="outfit-title"><div><span class="outfit-number">LOOK 0@(generatedOutfits.IndexOf(outfit)+1)</span><h3>@outfit.Title</h3></div><span class="match-pill">✳ @outfit.MatchLabel</span></div>
+                        <div class="outfit-items">
+                            @foreach (var garment in outfit.Garments)
+                            {
+                                <div class="outfit-garment">
+                                    <div class="outfit-thumb">
+                                        @if (!string.IsNullOrWhiteSpace(garment.Photo)) { <img src="@garment.Photo" alt="@garment.Name" /> } else { <span>♧</span> }
+                                    </div>
+                                    <div><small>@garment.Category</small><strong>@garment.Name</strong><span>@garment.Style · @garment.Fit</span></div>
+                                </div>
+                            }
+                        </div>
+                        <p class="outfit-reason">@outfit.Reason</p>
+                    </article>
+                }
+                <p class="disclaimer">I suggerimenti sono generati usando le informazioni inserite nel tuo armadio. L'abbinamento è un consiglio stilistico automatico, non un'analisi AI esterna.</p>
+            }
+            else
+            {
+                <div class="outfit-empty"><span>✳</span><h3>La prossima idea è nel tuo armadio.</h3><p>Seleziona le tue preferenze e lascia che Atelier trovi una nuova combinazione.</p></div>
+            }
+        }
+        <footer class="page-footer"><span>ATELIER © 2026</span><span>MADE FOR YOUR EVERYDAY STYLE</span></footer>
+    </main>
+</div>
+
+@if (showAdd)
+{
+    <div class="modal-backdrop" @onclick="CloseAdd">
+        <section class="add-modal" @onclick:stopPropagation="true">
+            <div class="modal-header"><div><div class="eyebrow">LA TUA COLLEZIONE</div><h2>Aggiungi un capo</h2><p>Inserisci i dettagli per catalogarlo nel tuo armadio.</p></div><button class="close-modal" @onclick="CloseAdd">×</button></div>
+            <EditForm Model="draft" OnValidSubmit="SaveItem">
+                <div class="photo-upload">
+                    @if (!string.IsNullOrEmpty(draft.Photo)) { <img src="@draft.Photo" alt="Anteprima capo" /> }
+                    else { <span class="upload-symbol">＋</span><strong>Aggiungi una fotografia</strong><small>JPG o PNG · massimo 2 MB</small> }
+                    <InputFile OnChange="HandlePhoto" accept="image/*" capture="environment" />
+                </div>
+                <div class="form-grid">
+                    <label class="field full">NOME DEL CAPO<input @bind="draft.Name" placeholder="Es. Maglione in lana" required /></label>
+                    <label class="field">TIPO DI CAPO<select @bind="draft.Category">@foreach (var c in Categories) { <option>@c</option> }</select></label>
+                    <label class="field">GENERE<select @bind="draft.Gender"><option>Unisex</option><option>Maschile</option><option>Femminile</option></select></label>
+                    <label class="field">STILE<select @bind="draft.Style">@foreach (var s in Styles) { <option>@s</option> }</select></label>
+                    <label class="field">VESTIBILITÀ<select @bind="draft.Fit">@foreach (var f in Fits) { <option>@f</option> }</select></label>
+                    <div class="field full"><span class="field-label">COLORI PRINCIPALI <small>(puoi selezionarne più di uno)</small></span>
+                        <div class="color-options">
+                            @foreach (var color in ColorNames)
+                            {
+                                <button type="button" class="color-option @(draft.Colors.Contains(color) ? "chosen" : "")" @onclick="() => ToggleColor(color)"><span class="swatch" style="background:@ColorHex(color)"></span>@color</button>
+                            }
+                        </div>
+                        <div class="custom-color"><input @bind="customColor" placeholder="Aggiungi un altro colore..." /><button type="button" class="outline-small" @onclick="AddCustomColor">Aggiungi</button></div>
+                    </div>
+                    <div class="field full"><span class="field-label">STAGIONE</span><div class="season-options">
+                        @foreach (var season in new[] { "Primavera", "Estate", "Autunno", "Inverno" })
+                        { <button type="button" class="season-option @(draft.Seasons.Contains(season) ? "chosen" : "")" @onclick="() => ToggleSeason(season)">@season</button> }
+                    </div></div>
+                    <label class="field full">NOTE <textarea @bind="draft.Notes" placeholder="Materiale, occasione, dettagli..."></textarea></label>
+                </div>
+                <div class="modal-actions"><button type="button" class="secondary-btn" @onclick="CloseAdd">Annulla</button><button type="submit" class="primary-btn">Salva nel mio armadio <span>→</span></button></div>
+            </EditForm>
+        </section>
+    </div>
+}
+
+@code {
+    private List<Garment> items = new();
+    private bool loaded, showAdd;
+    private string activeTab = "wardrobe", searchText = "", categoryFilter = "", customColor = "";
+    private string outfitSeason = "Tutte", outfitStyle = "", outfitGender = "";
+    private Garment draft = new();
+    private List<Outfit> generatedOutfits = new();
+
+    private static readonly string[] Categories = { "T-shirt", "Camicia", "Maglia", "Felpa", "Pantaloni", "Jeans", "Gonna", "Abito", "Giacca", "Cappotto", "Piumino", "Gilet", "Scarpe", "Stivali", "Sneakers", "Sandali", "Calze", "Sciarpa", "Cappello", "Guanti", "Cintura", "Borsa", "Cravatta", "Accessori", "Altro" };
+    private static readonly string[] Styles = { "Casual", "Elegante", "Streetwear", "Baggy", "Sportivo", "Minimal", "Vintage", "Classico", "Romantico", "Formale", "Boho", "Techwear" };
+    private static readonly string[] Fits = { "Regular", "Slim", "Oversize", "Baggy", "Relaxed", "Skinny", "Wide leg", "Crop", "Aderente" };
+    private static readonly string[] ColorNames = { "Nero", "Bianco", "Grigio", "Beige", "Marrone", "Blu", "Azzurro", "Verde", "Rosso", "Bordeaux", "Rosa", "Viola", "Giallo", "Arancione", "Crema" };
+
+    private List<Garment> FilteredItems => items
+        .Where(x => string.IsNullOrWhiteSpace(categoryFilter) || x.Category == categoryFilter)
+        .Where(x => string.IsNullOrWhiteSpace(searchText) || (x.Name + " " + x.Style + " " + string.Join(" ", x.Colors)).Contains(searchText, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(x => x.CreatedAt).ToList();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try {
+                var saved = await JS.InvokeAsync<string?>("atelierWardrobe.load");
+                if (!string.IsNullOrWhiteSpace(saved))
+                    items = JsonSerializer.Deserialize<List<Garment>>(saved) ?? new();
+            } catch { }
+            loaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private void SetTab(string tab) { activeTab = tab; generatedOutfits.Clear(); }
+    private void OpenAdd() { draft = new Garment(); showAdd = true; }
+    private void CloseAdd() => showAdd = false;
+    private void ClearFilters() { searchText = ""; categoryFilter = ""; }
+
+    private async Task HandlePhoto(InputFileChangeEventArgs e)
+    {
+        try {
+            var file = e.File;
+            if (file.Size > 2 * 1024 * 1024) { await JS.InvokeVoidAsync("alert", "La foto supera i 2 MB. Scegli un'immagine più leggera."); return; }
+            using var stream = file.OpenReadStream(2 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            draft.Photo = $"data:{file.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+        } catch { await JS.InvokeVoidAsync("alert", "Non è stato possibile caricare la foto."); }
+    }
+
+    private void ToggleColor(string color) { if (!draft.Colors.Remove(color)) draft.Colors.Add(color); }
+    private void ToggleSeason(string season) { if (!draft.Seasons.Remove(season)) draft.Seasons.Add(season); }
+    private void AddCustomColor() {
+        var value = customColor.Trim();
+        if (value.Length > 0 && !draft.Colors.Contains(value, StringComparer.OrdinalIgnoreCase)) draft.Colors.Add(value);
+        customColor = "";
+    }
+
+    private async Task SaveItem()
+    {
+        if (draft.Seasons.Count == 0) draft.Seasons.Add("Tutte");
+        if (draft.Colors.Count == 0) draft.Colors.Add("Non specificato");
+        if (string.IsNullOrWhiteSpace(draft.Name)) draft.Name = draft.Category;
+        draft.CreatedAt = DateTime.Now;
+        items.Insert(0, draft);
+        await Persist();
+        showAdd = false;
+    }
+
+    private async Task DeleteItem(Garment item)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Vuoi eliminare “{item.Name}” dal tuo armadio?");
+        if (!ok) return;
+        items.Remove(item);
+        await Persist();
+    }
+
+    private async Task Persist()
+    {
+        try { await JS.InvokeVoidAsync("atelierWardrobe.save", JsonSerializer.Serialize(items)); }
+        catch { await JS.InvokeVoidAsync("alert", "Spazio di archiviazione quasi esaurito. Prova a rimuovere alcune foto."); }
+    }
+
+    private void GenerateOutfit()
+    {
+        generatedOutfits.Clear();
+        var pool = items.Where(x => (outfitSeason == "Tutte" || x.Seasons.Contains(outfitSeason) || x.Seasons.Contains("Tutte"))
+            && (string.IsNullOrEmpty(outfitStyle) || x.Style.Equals(outfitStyle, StringComparison.OrdinalIgnoreCase))
+            && (string.IsNullOrEmpty(outfitGender) || x.Gender == outfitGender || x.Gender == "Unisex"))
+            .ToList();
+
+        var tops = pool.Where(x => new[] { "T-shirt", "Camicia", "Maglia", "Felpa" }.Contains(x.Category)).ToList();
+        var bottoms = pool.Where(x => new[] { "Pantaloni", "Jeans", "Gonna" }.Contains(x.Category)).ToList();
+        var onePieces = pool.Where(x => x.Category == "Abito").ToList();
+        var shoes = pool.Where(x => new[] { "Scarpe", "Stivali", "Sneakers", "Sandali" }.Contains(x.Category)).ToList();
+        var layers = pool.Where(x => new[] { "Giacca", "Cappotto", "Piumino", "Gilet" }.Contains(x.Category)).ToList();
+        var extras = pool.Where(x => new[] { "Sciarpa", "Cappello", "Borsa", "Cintura", "Accessori", "Calze" }.Contains(x.Category)).ToList();
+
+        var combinations = new List<List<Garment>>();
+        foreach (var top in tops)
+            foreach (var bottom in bottoms)
+                foreach (var shoe in shoes)
+                {
+                    var set = new List<Garment> { top, bottom, shoe };
+                    var layer = layers.FirstOrDefault(x => CompatibleStyle(x, top) && CompatibleSeason(x));
+                    if (layer != null) set.Add(layer);
+                    var extra = extras.FirstOrDefault(x => CompatibleStyle(x, top));
+                    if (extra != null) set.Add(extra);
+                    combinations.Add(set);
+                }
+        foreach (var dress in onePieces)
+            foreach (var shoe in shoes)
+            {
+                var set = new List<Garment> { dress, shoe };
+                var layer = layers.FirstOrDefault(x => CompatibleStyle(x, dress) && CompatibleSeason(x));
+                if (layer != null) set.Add(layer);
+                combinations.Add(set);
+            }
+
+        var chosen = combinations.OrderByDescending(ScoreOutfit).ThenBy(x => x.Sum(g => g.CreatedAt.Ticks % 1000)).Take(3).ToList();
+        int n = 1;
+        foreach (var set in chosen)
+        {
+            var styles = set.GroupBy(x => x.Style).OrderByDescending(g => g.Count()).First().Key;
+            generatedOutfits.Add(new Outfit {
+                Title = styles + (n == 1 ? " edit" : n == 2 ? " mood" : " selection"),
+                Garments = set,
+                MatchLabel = ScoreOutfit(set) >= 5 ? "Ottima armonia" : "Mix creativo",
+                Reason = BuildReason(set)
+            });
+            n++;
+        }
+        if (generatedOutfits.Count == 0)
+        {
+            // Se mancano le categorie essenziali, propone comunque combinazioni sensate di capi compatibili.
+            var fallback = pool.OrderByDescending(x => x.CreatedAt).Take(4).ToList();
+            if (fallback.Count >= 2)
+                generatedOutfits.Add(new Outfit { Title = "Il tuo mix personale", Garments = fallback, MatchLabel = "Mix creativo", Reason = "Una combinazione costruita con i capi disponibili. Aggiungi scarpe, top e pantaloni per suggerimenti più completi." });
+        }
+    }
+
+    private bool CompatibleSeason(Garment g) => outfitSeason == "Tutte" || g.Seasons.Contains(outfitSeason) || g.Seasons.Contains("Tutte");
+    private static bool CompatibleStyle(Garment a, Garment b) => a.Style == b.Style || a.Style == "Casual" || b.Style == "Casual" || a.Style == "Minimal" || b.Style == "Minimal";
+    private static int ScoreOutfit(List<Garment> set)
+    {
+        int score = set.SelectMany(x => x.Colors).Distinct(StringComparer.OrdinalIgnoreCase).Count() <= 4 ? 2 : 0;
+        score += set.Select(x => x.Style).Distinct().Count() == 1 ? 3 : 0;
+        score += set.Count(x => x.Fit is "Oversize" or "Baggy" or "Wide leg") <= 2 ? 1 : 0;
+        return score;
+    }
+    private static string BuildReason(List<Garment> set)
+    {
+        var colors = set.SelectMany(x => x.Colors).Where(c => c != "Non specificato").Distinct().Take(3).ToList();
+        var style = set.GroupBy(x => x.Style).OrderByDescending(g => g.Count()).First().Key;
+        return $"Un look {style.ToLowerInvariant()} che combina {string.Join(", ", colors)}. Gioca con le proporzioni e completa il risultato con gli accessori che preferisci.";
+    }
+    private static string ColorHex(string name) => name.ToLowerInvariant() switch {
+        "nero" => "#242321", "bianco" => "#f4f1e9", "grigio" => "#92918d", "beige" => "#c9b99e",
+        "marrone" => "#79543c", "blu" => "#263d65", "azzurro" => "#91b6cc", "verde" => "#65795b",
+        "rosso" => "#a7433c", "bordeaux" => "#682d3a", "rosa" => "#d7a4ad", "viola" => "#89729e",
+        "giallo" => "#e0c36c", "arancione" => "#ce8051", "crema" => "#e8dfcc", _ => "#b6a994"
+    };
+
+    public void Dispose() { }
+
+    public class Garment
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = "";
+        public string Category { get; set; } = "T-shirt";
+        public string Gender { get; set; } = "Unisex";
+        public string Style { get; set; } = "Casual";
+        public string Fit { get; set; } = "Regular";
+        public List<string> Colors { get; set; } = new();
+        public List<string> Seasons { get; set; } = new();
+        public string Notes { get; set; } = "";
+        public string Photo { get; set; } = "";
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    }
+    private class Outfit { public string Title { get; set; } = ""; public string MatchLabel { get; set; } = ""; public string Reason { get; set; } = ""; public List<Garment> Garments { get; set; } = new(); }
+}
